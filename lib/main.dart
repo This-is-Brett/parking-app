@@ -205,10 +205,9 @@ class _ActiveParkingScreenState
         d.inHours.toString().padLeft(2, '0');
     final minutes =
         d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds =
-        d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    if (hours == 0) return "${minutes}m";
 
-    return "$hours:$minutes:$seconds";
+    return "$hours:$minutes";
   }
 
   @override
@@ -240,7 +239,7 @@ class _ActiveParkingScreenState
               onPressed: () {
                 final end = DateTime.now();
 
-                parkingHistory.add(
+                parkingHistory.insert (0,
                   ParkingSession(
                     start: widget.startTime,
                     end: end,
@@ -394,12 +393,19 @@ class ParkingDetailsScreen extends StatefulWidget {
       _ParkingDetailsScreenState();
 }
 
-class _ParkingDetailsScreenState
-    extends State<ParkingDetailsScreen> {
+class _ParkingDetailsScreenState extends State<ParkingDetailsScreen> {
 
   final levelController = TextEditingController();
   final rowController = TextEditingController();
   final spotController = TextEditingController();
+
+  @override
+  void dispose() {
+    levelController.dispose();
+    rowController.dispose();
+    spotController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
