@@ -1,7 +1,25 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
-void main() {
+import 'screens/home_screen.dart';
+import 'models/parking_session.dart';
+import 'services/notification_service.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Hive
+  await Hive.initFlutter();
+
+  // Register Hive model
+  Hive.registerAdapter(ParkingSessionAdapter());
+
+  // Open Hive box
+  await Hive.openBox<ParkingSession>('parking_history');
+
+  // Initialize notifications
+  await NotificationService.init();
+
   runApp(const ParkingApp());
 }
 
@@ -20,26 +38,3 @@ class ParkingApp extends StatelessWidget {
     );
   }
 }
-
-/* ============================
-   DATA MODEL
-============================ */
-
-
-
-/* ============================
-   HOME SCREEN
-============================ */
-
-
-
-/* ============================
-   ACTIVE PARKING SCREEN
-============================ */
-
-
-
-/* ============================
-   PARKING DETAILS SCREEN
-============================ */
-
