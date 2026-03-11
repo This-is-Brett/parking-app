@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
+import 'dart:io';
 
-import 'active_parking_screen.dart';
-import 'history_screen.dart';
-import 'parking_details_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../services/location_service.dart';
+import 'active_parking_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,166 +16,308 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
 
-  //// PARKING LIMIT VARIABLES
+  bool isFreeVersion = true;
 
-  Duration? parkingLimit;
+  GoogleMapController? _mapController;
 
-  int selectedIndex = 1;
+  String selectedTime = "1h";
+  Duration customDuration = const Duration(hours: 1);
 
-  final limits = [
-    const Duration(minutes: 30),
-    const Duration(hours: 1),
-    const Duration(hours: 2),
-  ];
+  double? currentLatitude;
+  double? currentLongitude;
+
+  final Set<Marker> _markers = {};
 
   @override
   void initState() {
     super.initState();
-    parkingLimit = limits[1];
+    _loadLocation();
   }
 
-  //// LOCATION + PARKING FLOW
+  /// LOAD LOCATION
+  Future<void> _loadLocation() async {
 
-  Future<void> _showParkingDialog(BuildContext context) async {
+    final pos = await LocationService.getCurrentLocation();
 
-    Position? position;
+    if (pos != null) {
 
-    try {
-      position = await LocationService.getLocation();
+      setState(() {
 
-      print("GPS LAT: ${position.latitude}");
-      print("GPS LON: ${position.longitude}");
+        currentLatitude = pos.latitude;
+        currentLongitude = pos.longitude;
 
-    } catch (e) {
-      position = null;
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) {
-
-        return AlertDialog(
-          title: const Text("Add Parking Details"),
-          content: const Text(
-            "Would you like to add details about your parking spot?",
+        _markers.add(
+          Marker(
+            markerId: const MarkerId("parking_location"),
+            position: LatLng(pos.latitude, pos.longitude),
+            icon: BitmapDescriptor.defaultMarkerWithHue(
+              BitmapDescriptor.hueRed,
+            ),
           ),
-          actions: [
-
-            //// SKIP DETAILS
-
-            TextButton(
-              child: const Text("Skip"),
-              onPressed: () {
-
-                Navigator.pop(context);
-
-                final now = DateTime.now();
-
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ActiveParkingScreen(
-                      startTime: now,
-                      latitude: position?.latitude,
-                      longitude: position?.longitude,
-                      parkingLimit: parkingLimit,
-                    ),
-                  ),
-                );
-              },
-            ),
-
-            //// ADD DETAILS
-
-            TextButton(
-              child: const Text("Add Details"),
-              onPressed: () {
-
-                Navigator.pop(context);
-
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ParkingDetailsScreen(
-                      latitude: position?.latitude,
-                      longitude: position?.longitude,
-                      parkingLimit: parkingLimit,
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
         );
-      },
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+
+    return Scaffold(
+      body: Column(
+        children: [
+
+          Expanded(
+            child: Stack(
+              children: [
+
+                /// MAP
+                Positioned.fill(
+                  child: GoogleMap(
+                    initialCameraPosition: const CameraPosition(
+                      target: LatLng(51.0, 9.0),
+                      zoom: 15,
+                    ),
+                    myLocationEnabled: true,
+                    myLocationButtonEnabled: false,
+                    zoomControlsEnabled: false,
+                    markers: _markers,
+                    onMapCreated: (controller) {
+                      _mapController = controller;
+                    },
+                  ),
+                ),
+
+                /// FLOATING HEADER
+Positioned(
+  top: 0,
+  left: 0,
+  right: 0,
+  child: SafeArea(
+    child: SizedBox(
+      width: double.infinity,
+      height: 100,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+
+          /// CENTERED LOGO (center of entire screen)
+          Center(
+            child: Image.asset(
+              'assets/logo/logo_horizontal.png',
+              height: 100,
+              fit: BoxFit.contain,
+            ),
+          ),
+
+          /// SETTINGS BUTTON (right side)
+          Positioned(
+            right: 16,
+            child: IconButton(
+              icon: const Icon(Icons.settings),
+              iconSize: 26,
+              color: Colors.black87,
+              onPressed: () {
+                // open settings
+              },
+            ),
+          ),
+        ],
+      ),
+    ),
+  ),
+),
+
+                /// LOCATION BUTTON
+                Positioned(
+                  right: 20,
+                  bottom: 260,
+                  child: FloatingActionButton(
+                    mini: true,
+                    backgroundColor: Colors.white,
+                    child: const Icon(
+                      Icons.my_location,
+                      color: Colors.indigo,
+                    ),
+                    onPressed: _goToUserLocation,
+                  ),
+                ),
+
+                /// CONTROL PANEL
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 80,
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.95),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+
+                        Row(
+                          children: [
+                            Expanded(child: _timeButton("30m")),
+                            const SizedBox(width: 8),
+                            Expanded(child: _timeButton("1h")),
+                            const SizedBox(width: 8),
+                            Expanded(child: _timeButton("2h")),
+                            const SizedBox(width: 8),
+                            Expanded(child: _customButton()),
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        SizedBox(
+                          width: double.infinity,
+                          height: 60,
+                          child: ElevatedButton(
+                            onPressed: _startParking,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF4B5CC4),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: const Text(
+                              "Park Now",
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          /// AD BANNER
+          if (isFreeVersion)
+            Container(
+              height: 60,
+              width: double.infinity,
+              color: Colors.grey.shade300,
+              alignment: Alignment.center,
+              child: const Text("Ad Banner"),
+            ),
+        ],
+      ),
     );
   }
 
-  //// CUSTOM PARKING LIMIT PICKER
+  /// TIME BUTTON
+  Widget _timeButton(String label) {
 
-  Future<void> _selectCustomLimit() async {
+    bool selected = selectedTime == label;
 
-    int hours = 1;
-    int minutes = 0;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          selectedTime = label;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF4B5CC4) : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : Colors.black87,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// CUSTOM BUTTON
+  Widget _customButton() {
+
+    bool selected = selectedTime == "custom";
+
+    return GestureDetector(
+      onTap: _pickCustomTime,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF4B5CC4) : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          selected
+              ? "${customDuration.inHours}h ${(customDuration.inMinutes % 60)}m"
+              : "Custom",
+          style: TextStyle(
+            color: selected ? Colors.white : Colors.black87,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// CUSTOM TIMER (FIXED - RESTORED)
+  Future<void> _pickCustomTime() async {
+
+    int hours = customDuration.inHours;
+    int minutes = customDuration.inMinutes % 60;
 
     await showDialog(
       context: context,
       builder: (context) {
 
         return AlertDialog(
-          title: const Text("Custom Parking Time"),
+          title: const Text("Select parking duration"),
 
           content: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
 
-              //// HOURS
-
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-
-                  const Text("Hours"),
-
-                  DropdownButton<int>(
-                    value: hours,
-                    items: List.generate(
-                      12,
-                      (i) => DropdownMenuItem(
-                        value: i,
-                        child: Text("$i"),
-                      ),
-                    ),
-                    onChanged: (value) {
-                      hours = value!;
-                    },
+              DropdownButton<int>(
+                value: hours,
+                items: List.generate(
+                  12,
+                  (i) => DropdownMenuItem(
+                    value: i,
+                    child: Text("$i h"),
                   ),
-                ],
+                ),
+                onChanged: (v) => hours = v!,
               ),
 
-              //// MINUTES
-
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-
-                  const Text("Minutes"),
-
-                  DropdownButton<int>(
-                    value: minutes,
-                    items: const [
-
-                      DropdownMenuItem(value: 0, child: Text("00")),
-                      DropdownMenuItem(value: 15, child: Text("15")),
-                      DropdownMenuItem(value: 30, child: Text("30")),
-                      DropdownMenuItem(value: 45, child: Text("45")),
-
-                    ],
-                    onChanged: (value) {
-                      minutes = value!;
-                    },
-                  ),
+              DropdownButton<int>(
+                value: minutes,
+                items: const [
+                  DropdownMenuItem(value: 0, child: Text("0 m")),
+                  DropdownMenuItem(value: 15, child: Text("15 m")),
+                  DropdownMenuItem(value: 30, child: Text("30 m")),
+                  DropdownMenuItem(value: 45, child: Text("45 m")),
                 ],
+                onChanged: (v) => minutes = v!,
               ),
             ],
           ),
@@ -182,27 +325,24 @@ class _HomeScreenState extends State<HomeScreen> {
           actions: [
 
             TextButton(
-              child: const Text("Cancel"),
               onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
             ),
 
-            TextButton(
-              child: const Text("OK"),
+            ElevatedButton(
               onPressed: () {
 
                 setState(() {
-
-                  parkingLimit = Duration(
+                  customDuration = Duration(
                     hours: hours,
                     minutes: minutes,
                   );
-
-                  selectedIndex = 3;
-
+                  selectedTime = "custom";
                 });
 
                 Navigator.pop(context);
               },
+              child: const Text("OK"),
             ),
           ],
         );
@@ -210,121 +350,45 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  //// LIMIT BUTTON BUILDER
+  /// START PARKING
+  Future<void> _startParking() async {
 
-  Widget buildLimitButton(String label, int index, Duration? value) {
+    final duration = _getSelectedDuration();
 
-    final isSelected = selectedIndex == index;
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-
-          if (index == 3) {
-            _selectCustomLimit();
-            return;
-          }
-
-          setState(() {
-            selectedIndex = index;
-            parkingLimit = value;
-          });
-        },
-
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.indigo : Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(10),
-          ),
-
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.black,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ActiveParkingScreen(
+          startTime: DateTime.now(),
+          parkingLimit: duration,
+          latitude: currentLatitude,
+          longitude: currentLongitude,
         ),
       ),
     );
   }
 
-  //// UI BUILD
+  Duration _getSelectedDuration() {
 
-  @override
-  Widget build(BuildContext context) {
+    if (selectedTime == "30m") return const Duration(minutes: 30);
+    if (selectedTime == "1h") return const Duration(hours: 1);
+    if (selectedTime == "2h") return const Duration(hours: 2);
+    if (selectedTime == "custom") return customDuration;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Parking App"),
-      ),
+    return const Duration(hours: 1);
+  }
 
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+  Future<void> _goToUserLocation() async {
 
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+    if (_mapController == null ||
+        currentLatitude == null ||
+        currentLongitude == null) return;
 
-            //// PARKING LIMIT SELECTOR
-
-            Row(
-              children: [
-
-                buildLimitButton("30m", 0, limits[0]),
-                buildLimitButton("1h", 1, limits[1]),
-                buildLimitButton("2h", 2, limits[2]),
-                buildLimitButton("Custom", 3, null),
-
-              ],
-            ),
-
-            const SizedBox(height: 40),
-
-            //// PARK NOW BUTTON
-
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-
-              child: ElevatedButton(
-                onPressed: () => _showParkingDialog(context),
-
-                child: const Text(
-                  "Park Now",
-                  style: TextStyle(fontSize: 18),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            //// HISTORY BUTTON
-
-            SizedBox(
-              width: double.infinity,
-              height: 45,
-
-              child: OutlinedButton(
-                onPressed: () {
-
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const HistoryScreen(),
-                    ),
-                  );
-                },
-
-                child: const Text("View History"),
-              ),
-            ),
-          ],
+    await _mapController!.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: LatLng(currentLatitude!, currentLongitude!),
+          zoom: 16,
         ),
       ),
     );

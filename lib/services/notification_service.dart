@@ -2,7 +2,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
 
-  static final FlutterLocalNotificationsPlugin _notifications =
+  static final FlutterLocalNotificationsPlugin notifications =
       FlutterLocalNotificationsPlugin();
 
   static Future init() async {
@@ -13,7 +13,18 @@ class NotificationService {
       iOS: ios,
     );
 
-    await _notifications.initialize(settings);
+    await notifications.initialize(settings);
+
+    /// Request permissions explicitly
+    final iosPlugin =
+        notifications.resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin>();
+
+    await iosPlugin?.requestPermissions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
   }
 
   static Future showWarning() async {
@@ -24,10 +35,10 @@ class NotificationService {
       iOS: iosDetails,
     );
 
-    await _notifications.show(
+    await notifications.show(
       0,
-      "Parking expiring",
-      "⚠ Only 5 minutes remaining",
+      "Parking Warning",
+      "5 minutes remaining",
       details,
     );
   }
